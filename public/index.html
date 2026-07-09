@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Rústico · Club de café</title>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Karla:wght@400;600;700&family=Rubik:wght@600&display=swap" rel="stylesheet">
+<style>
+  :root{ --cream:#f0e9d7; --paper:#f7f3e6; --brown:#673921; --charcoal:#434329; --taupe:#a39c73; --olive:#7b763d; --olive-dark:#5e5c30; }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--cream); font-family:'Karla',sans-serif; color:var(--charcoal); display:flex; justify-content:center; padding:30px 16px; }
+  .card{ width:100%; max-width:400px; background:var(--paper); border-radius:22px; padding:28px 24px; box-shadow:0 18px 40px -18px rgba(67,67,41,.35); }
+  .word{ text-align:center; font-family:'Caveat',cursive; font-size:40px; color:var(--olive); margin-bottom:2px; }
+  h1{ font-family:'Rubik',sans-serif; font-size:19px; color:var(--brown); text-align:center; margin:8px 0 4px; }
+  p.sub{ text-align:center; font-size:14px; color:var(--charcoal); opacity:.75; margin:0 0 20px; }
+  .field{ margin-bottom:14px; }
+  label{ display:block; font-size:12px; font-weight:600; text-transform:uppercase; color:var(--taupe); margin-bottom:6px; }
+  input{ width:100%; padding:11px 4px; font-size:16px; border:none; border-bottom:2px solid rgba(103,57,33,.25); background:transparent; outline:none; }
+  input:focus{ border-color:var(--olive); }
+  .btn{ display:block; width:100%; border:none; border-radius:14px; padding:14px; font-weight:700; font-size:15px; cursor:pointer; margin-top:6px; }
+  .btn-primary{ background:var(--olive); color:var(--paper); }
+  .btn-wallet{ background:#000; color:#fff; margin-top:16px; display:none; text-align:center; text-decoration:none; }
+  .error{ color:#8a3b2b; font-size:13px; text-align:center; min-height:16px; }
+  .status{ text-align:center; font-size:13.5px; color:var(--taupe); margin-top:14px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="word">Rústico</div>
+    <h1>Club de café</h1>
+    <p class="sub">Ingresá tu teléfono. Si es tu primera vez, te pedimos el nombre y armamos tu tarjeta.</p>
+
+    <div class="field">
+      <label>Teléfono</label>
+      <input id="phone" type="tel" placeholder="Ej: 1122334455" inputmode="numeric" />
+    </div>
+    <div class="field" id="nameField" style="display:none;">
+      <label>Nombre</label>
+      <input id="name" type="text" placeholder="¿Cómo te llamamos?" />
+    </div>
+
+    <div class="error" id="error"></div>
+    <button class="btn btn-primary" id="btnGo">Continuar</button>
+    <a class="btn btn-wallet" id="btnWallet" href="#" target="_blank">Agregar a Google Wallet</a>
+    <div class="status" id="status"></div>
+  </div>
+
+<script>
+  const el = {
+    phone: document.getElementById('phone'),
+    name: document.getElementById('name'),
+    nameField: document.getElementById('nameField'),
+    error: document.getElementById('error'),
+    status: document.getElementById('status'),
+    btnGo: document.getElementById('btnGo'),
+    btnWallet: document.getElementById('btnWallet')
+  };
+
+  let stage = 'lookup'; // lookup -> maybe register -> done
+
+  async function checkExisting(){
+    const phone = el.phone.value.replace(/\D/g,'');
+    if(phone.length < 8){ el.error.textContent = 'Ingresá un teléfono válido.'; return; }
+    el.error.textContent = '';
+    el.btnGo.disabled = true; el.btnGo.textContent = 'Buscando...';
+
+    try{
+      const r = await fetch('/api/customer/' + phone);
+      el.btnGo.disabled = false; el.btnGo.textContent = 'Continuar';
+      if(r.ok){
+        const data = await r.json();
+        showWallet(data);
+      } else {
+        el.nameField.style.display = 'block';
+        stage = 'register';
+        el.btnGo.textContent = 'Crear mi tarjeta';
+      }
+    }catch(err){
+      el.btnGo.disabled = false; el.btnGo.textContent = 'Continuar';
+      el.error.textContent = 'No se pudo conectar con el servidor.';
+    }
+  }
+
+  async function register(){
+    const phone = el.phone.value.replace(/\D/g,'');
+    const name = el.name.value.trim();
+    if(!name){ el.error.textContent = 'Contanos tu nombre.'; return; }
+
+    el.error.textContent = '';
+    el.btnGo.disabled = true; el.btnGo.textContent = 'Creando...';
+
+    try{
+      const r = await fetch('/api/register', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ phone, name })
+      });
+      const data = await r.json();
+      el.btnGo.disabled = false; el.btnGo.textContent = 'Continuar';
+      if(r.ok){ showWallet(data); }
+      else{ el.error.textContent = data.error || 'Algo falló.'; }
+    }catch(err){
+      el.btnGo.disabled = false; el.btnGo.textContent = 'Continuar';
+      el.error.textContent = 'No se pudo conectar con el servidor.';
+    }
+  }
+
+  function showWallet(data){
+    el.status.textContent = 'Hola, ' + data.customer.name.split(' ')[0] + ' — ' + data.customer.stamps + ' / 8 cafés';
+    el.btnWallet.href = data.saveUrl;
+    el.btnWallet.style.display = 'block';
+    el.btnGo.style.display = 'none';
+    el.nameField.style.display = 'none';
+    el.phone.disabled = true;
+  }
+
+  el.btnGo.addEventListener('click', function(){
+    if(stage === 'lookup') checkExisting();
+    else register();
+  });
+</script>
+</body>
+</html>
